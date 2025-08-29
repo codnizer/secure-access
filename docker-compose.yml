@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector
+    container_name: secure_access_db_container
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    ports:
+      - "5433:5432" # Expose DB port to host (optional for app, useful for external tools)
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persist database data
+
+  backend:
+    build:
+      context: . # Build from the current directory (where Dockerfile is)
+      dockerfile: Dockerfile
+    container_name: secure_access_backend_container
+    restart: always
+    ports:
+      - "3000:3000" # Expose backend port to host
+    environment:
+      DB_USER: ${DB_USER}
+      DB_HOST: db # IMPORTANT: Use the service name 'db' as the hostname for the database
+      DB_DATABASE: ${DB_DATABASE}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: 5432
+      PORT: 3000
+    depends_on:
+      - db # Ensure 'db' service starts before 'backend'
+    volumes:
+      - ./src:/app/src # Mount your src directory for hot-reloading during development (optional, but very useful)
+      - ./migrations:/app/migrations # Mount migrations directory
+      - ./node_modules:/app/node_modules # Prevent host's node_modules from overriding container's
+
+volumes:
+  db_data: # Define the volume for database persistence
