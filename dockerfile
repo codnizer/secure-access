@@ -1,7 +1,18 @@
-# Use an official Node.js runtime as a parent image
-FROM node:20-alpine
+FROM node:20
 
-# Set the working directory in the container
+# Install system dependencies required by TensorFlow.js
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    build-essential \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1-mesa-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
 WORKDIR /app
 
 # Copy package.json and package-lock.json to the working directory
