@@ -9,7 +9,11 @@ const path = require('path');
 const guardKioskAssignmentRoutes = require('./routes/guardKioskAssignmentRoutes');
 const requestRoutes = require('./routes/requestRoutes'); // Import new routes
 const logRoutes = require('./routes/logRoutes'); 
+const personnelEmplacementsRoutes = require('./routes/personnelEmplacementsRoutes');
+
+
 app.use(express.json());
+
 
 app.get('/', (req, res) => {
   res.send('Welcome to the Secure Access System Backend (containerized)!');
@@ -26,4 +30,5 @@ app.use('/api/kiosk-devices', kioskDeviceRoutes);
 app.use('/api/guard-kiosk-assignments', guardKioskAssignmentRoutes);
 app.use('/api/requests', requestRoutes); // New route
 app.use('/api/logs', logRoutes);  
+app.use('/api/personnel-emplacements', personnelEmplacementsRoutes);
 module.exports = app;
