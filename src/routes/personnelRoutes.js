@@ -11,4 +11,6 @@ router.put('/:id', personnelController.updatePersonnel);
 router.delete('/:id', personnelController.deletePersonnel);
  
 router.post('/upload-image', upload.single('image'), personnelController.uploadImageWithEmbeddings);
+router.post('/verify-image', upload.single('image'), personnelController.verifyImage);
+
 module.exports = router;

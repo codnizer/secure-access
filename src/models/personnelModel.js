@@ -91,37 +91,45 @@ class Personnel {
     return res.rows[0];
   }
 
-  static async update(id, updates) {
-    const fields = [];
-    const values = [];
-    let queryIndex = 1;
+static async update(id, updates) {
+  const fields = [];
+  const values = [];
+  let queryIndex = 1;
 
-    for (const key in updates) {
-      if (updates.hasOwnProperty(key)) {
-        if (key === 'expirationDate') {
-          // Ensure expirationDate is a proper timestamp string
-          values.push(new Date(updates[key]).toISOString());
-        } else if (key === 'assignedEmplacementId' && updates[key] === null) {
-          // Allow setting FK to null
-          values.push(null);
-        } else {
-          values.push(updates[key]);
+  for (const key in updates) {
+    if (updates.hasOwnProperty(key)) {
+      let value = updates[key];
+
+      if (key === 'expirationDate') {
+        value = new Date(value).toISOString();
+      } else if (key === 'assignedEmplacementId' && value === null) {
+        value = null;
+      } else if (key === 'photoEmbeddings' || key === 'fingerprintEmbeddings') {
+        if (!Array.isArray(value)) {
+          throw new Error(`${key} must be an array of numbers`);
         }
-        fields.push(`${key} = $${queryIndex++}`);
+        // Convert numeric array to PostgreSQL vector literal format: '[num1,num2,...]'
+        value = `[${value.join(',')}]`;
       }
-    }
 
-    if (fields.length === 0) {
-      return null; // No fields to update
+      values.push(value);
+      fields.push(`${key} = $${queryIndex++}`);
     }
-
-    values.push(id); // Add ID for the WHERE clause
-    const res = await db.query(
-      `UPDATE Personnel SET ${fields.join(', ')} WHERE id = $${queryIndex} RETURNING *`,
-      values
-    );
-    return res.rows[0];
   }
+
+  if (fields.length === 0) return null;
+
+  values.push(id);
+  const res = await db.query(
+    `UPDATE Personnel SET ${fields.join(', ')} WHERE id = $${queryIndex} RETURNING *`,
+    values
+  );
+
+  return res.rows[0];
+}
+
+
+
 
   static async delete(id) {
     const res = await db.query('DELETE FROM Personnel WHERE id = $1 RETURNING *', [id]);

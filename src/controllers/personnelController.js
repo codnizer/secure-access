@@ -110,35 +110,57 @@ exports.getPersonnelByQrCode = async (req, res) => {
   }
 };
 
+
 exports.updatePersonnel = async (req, res) => {
   try {
-    const { assignedEmplacementId, ...updates } = req.body;
+    const { assignedEmplacementId, photoembeddings, fingerprintEmbeddings, ...updates } = req.body;
 
     // Validate assignedEmplacementId if provided
-    if (assignedEmplacementId !== undefined && assignedEmplacementId !== null) {
-      const emplacementExists = await Emplacement.findById(assignedEmplacementId);
-      if (!emplacementExists) {
-        return res.status(400).json({ message: 'Invalid assignedEmplacementId: Emplacement does not exist' });
-      }
-    }
-    // Re-add assignedEmplacementId to updates if it was valid or null
     if (assignedEmplacementId !== undefined) {
-      updates.assignedEmplacementId = assignedEmplacementId;
+      if (assignedEmplacementId !== null) {
+        const emplacementExists = await Emplacement.findById(assignedEmplacementId);
+        if (!emplacementExists) {
+          return res.status(400).json({ message: 'Invalid assignedEmplacementId: Emplacement does not exist' });
+        }
+      }
+      updates.assignedEmplacementId = assignedEmplacementId; // can be null
     }
-    console.log('Updates to be applied:', updates);
+
+    console.log('Received photoEmbeddings:', photoembeddings);
+    if (photoembeddings) {
+      updates.photoEmbeddings = photoembeddings;
+    }
+
+    // Ensure embeddings are numeric arrays for PostgreSQL vector type
+/*     if (Array.isArray(photoEmbeddings)) {
+      updates.photoEmbeddings = photoEmbeddings.map(Number); // keep as array
+    }
+
+    if (Array.isArray(fingerprintEmbeddings)) {
+      updates.fingerprintEmbeddings = fingerprintEmbeddings.map(Number); // keep as array
+    } */
+
+     console.log('Updates to be applied:', updates);
+
+    // Update personnel
     const updatedPersonnel = await Personnel.update(req.params.id, updates);
+
     if (!updatedPersonnel) {
       return res.status(404).json({ message: 'Personnel not found or no fields to update' });
     }
+
     res.status(200).json(updatedPersonnel);
   } catch (error) {
     console.error('Error updating personnel:', error);
+
     if (error.message.includes('National ID already exists')) {
       return res.status(409).json({ message: error.message });
     }
+
     res.status(500).json({ message: 'Error updating personnel', error: error.message });
   }
 };
+
 
 exports.deletePersonnel = async (req, res) => {
   try {
@@ -239,9 +261,9 @@ async function generateFaceEmbeddings(imagePath) {
     // Pad to 512 dimensions if needed (your requirement)
     // In practice, face-api.js provides 128-dim embeddings which are standard for face recognition
     // You might want to reconsider if you really need 512 dimensions
-    const paddedDescriptor = descriptor.concat(Array(512 - descriptor.length).fill(0));
-    
-    return paddedDescriptor;
+/*     const paddedDescriptor = descriptor.concat(Array(512 - descriptor.length).fill(0));
+     */
+    return descriptor;
   } catch (error) {
     console.error('Error generating face embeddings:', error);
     throw error;
@@ -278,5 +300,62 @@ exports.uploadImageWithEmbeddings = async (req, res) => {
   } catch (error) {
     console.error('Error in uploadImageWithEmbeddings:', error);
     res.status(500).json({ message: 'Error uploading image', error: error.message });
+  }
+};
+
+const cosineSimilarity = (vecA, vecB) => {
+  const dot = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
+  const magA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
+  const magB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+  return dot / (magA * magB);
+};
+
+exports.verifyImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image uploaded' });
+    }
+
+    const imagePath = path.join(uploadsDir, req.file.filename);
+
+    // Generate embeddings for the uploaded image
+    const uploadedEmbeddings = await generateFaceEmbeddings(imagePath);
+
+    // Fetch all personnel
+    const personnelList = await Personnel.findAll();
+
+    let matchedPersonnel = null;
+    let highestSimilarity = 0;
+    const threshold = 0.9; // adjust threshold according to your accuracy needs
+
+    for (const p of personnelList) {
+      if (!p.photoembeddings) continue;
+
+      // Convert stored string to array
+      const storedEmbeddings = p.photoembeddings
+        .replace(/^\[|\]$/g, '') // remove brackets
+        .split(',')
+        .map(Number);
+
+      const similarity = cosineSimilarity(uploadedEmbeddings, storedEmbeddings);
+
+      if (similarity > highestSimilarity) {
+        highestSimilarity = similarity;
+        matchedPersonnel = p;
+      }
+    }
+
+    if (matchedPersonnel && highestSimilarity >= threshold) {
+      return res.status(200).json({
+        message: 'Personnel verified',
+        personnel: matchedPersonnel,
+        similarity: highestSimilarity,
+      });
+    } else {
+      return res.status(404).json({ message: 'No matching personnel found', similarity: highestSimilarity });
+    }
+  } catch (error) {
+    console.error('Error verifying image:', error);
+    res.status(500).json({ message: 'Error verifying image', error: error.message });
   }
 };
