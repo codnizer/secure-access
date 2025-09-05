@@ -1,30 +1,42 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api'; // Our Axios instance
-// import { jwtDecode } from 'jwt-decode'; // Uncomment if you install jwt-decode
+import jwtDecode from 'jwt-decode';
 
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // Could store decoded token info
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const loadUserFromToken = async () => {
-      const token = localStorage.getItem('admin_token'); // Or check for other token types
+      const token = localStorage.getItem('admin_token');
       if (token) {
         try {
-          // You might want to verify the token with your backend or decode it
-          // For simplicity here, we'll just set a dummy user if a token exists
-          // In a real app, you'd probably call an /api/auth/me endpoint to get user details
-          // const decoded = jwtDecode(token);
-          // setUser({ id: decoded.userId, email: decoded.email, role: decoded.role });
-          setUser({ email: 'admin@example.com', role: 'admin' }); // Dummy user
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          // Verify token is still valid by making a request to the backend
+          const response = await api.get('/api/admins/auth/verify', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (response.data.valid) {
+            const decoded = jwtDecode(token);
+            setUser({ 
+              id: decoded.id, 
+              email: decoded.email, 
+              role: decoded.role,
+              fname: decoded.fname,
+              lname: decoded.lname
+            });
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          } else {
+            throw new Error('Token invalid');
+          }
         } catch (error) {
           console.error("Invalid token:", error);
           localStorage.removeItem('admin_token');
+          delete api.defaults.headers.common['Authorization'];
         }
       }
       setLoading(false);
@@ -36,19 +48,35 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setLoading(true);
     try {
-      // Replace with your actual admin login endpoint
-      const response = await api.post('/auth/admin/login', { email, password });
-      const { token, user: userData } = response.data; // Assuming your backend returns token and user data
+      const response = await api.post('/admins/auth/login', { email, password });
+      const { token, admin } = response.data; // Your backend returns { token, admin }
+      
       localStorage.setItem('admin_token', token);
-      setUser(userData || { email, role: 'admin' }); // Set user data from response or dummy
+      
+      // Set user data from the response
+      setUser({
+        id: admin.id,
+        email: admin.email,
+        fname: admin.fname,
+        lname: admin.lname,
+        phone: admin.phone,
+        role: 'admin'
+      });
+      
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       navigate('/admin/dashboard');
-      return true;
+      return { success: true, data: response.data };
     } catch (error) {
       console.error('Login failed:', error);
       setUser(null);
       localStorage.removeItem('admin_token');
-      throw error; // Re-throw to be handled by the component
+      delete api.defaults.headers.common['Authorization'];
+      
+      // Return error information for handling in components
+      return { 
+        success: false, 
+        error: error.response?.data?.message || 'Login failed' 
+      };
     } finally {
       setLoading(false);
     }
@@ -58,14 +86,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('admin_token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
-    navigate('/');
+    navigate('/admin/login');
   };
 
   const isAuthenticated = () => {
-    return !!user; // Simple check if a user object exists
+    return !!user;
   };
 
-  // You might add specific role checks here, e.g., isAdmin, isGuard, isPersonnel
   const isAdmin = () => user?.role === 'admin';
 
   const authContextValue = {

@@ -24,8 +24,8 @@ class Personnel {
     lname,
     photoUrl,
     pin, // PIN can be provided or generated
-    expirationDate,
-    assignedEmplacementId, // This should be a valid Emplacement UUID
+    
+    
     phone,
     service,
     photoEmbeddings,
@@ -35,15 +35,14 @@ class Personnel {
     const generatedPin = pin || Personnel.generatePin();
     const qrCode = Personnel.generateQrCode(); // Always generate a new QR code
 
-    // Ensure expirationDate is a proper timestamp string
-    const expDate = new Date(expirationDate).toISOString();
+ 
 
     try {
       const res = await db.query(
-        `INSERT INTO Personnel (national_id, fname, lname, photoUrl, qrCode, pin, expirationDate,
-                                assignedEmplacementId, phone, service, photoEmbeddings,
+        `INSERT INTO Personnel (national_id, fname, lname, photoUrl, qrCode, pin
+                                , phone, service, photoEmbeddings,
                                 fingerprintEmbeddings, isActive)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           national_id,
@@ -51,9 +50,7 @@ class Personnel {
           lname,
           photoUrl,
           qrCode,
-          generatedPin,
-          expDate,
-          assignedEmplacementId,
+          generatedPin, 
           phone,
           service,
           photoEmbeddings,
@@ -100,7 +97,7 @@ static async update(id, updates) {
     if (updates.hasOwnProperty(key)) {
       let value = updates[key];
 
-      if (key === 'expirationDate') {
+      /* if (key === 'expirationDate') {
         value = new Date(value).toISOString();
       } else if (key === 'assignedEmplacementId' && value === null) {
         value = null;
@@ -110,7 +107,7 @@ static async update(id, updates) {
         }
         // Convert numeric array to PostgreSQL vector literal format: '[num1,num2,...]'
         value = `[${value.join(',')}]`;
-      }
+      } */
 
       values.push(value);
       fields.push(`${key} = $${queryIndex++}`);

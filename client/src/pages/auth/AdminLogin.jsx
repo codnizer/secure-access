@@ -6,23 +6,28 @@ const AdminLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false); // Local loading state for the form submission
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth(); // Get the login function from AuthContext
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); // Start local loading
+    setLoading(true);
     setError('');
 
     try {
-      await login(email, password); // Use the login function from AuthContext
-      // login function already handles navigation on success
+      // The login function now returns an object with success and error properties
+      const result = await login(email, password);
+      
+      if (!result.success) {
+        setError(result.error || 'Login failed. Please check your credentials.');
+      }
+      // If successful, the login function handles navigation automatically
     } catch (err) {
-      // The login function in AuthContext re-throws the error
+      // Fallback error handling
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
-      setLoading(false); // Stop local loading
+      setLoading(false);
     }
   };
 
@@ -62,7 +67,10 @@ const AdminLogin = () => {
             <div className="form-control mt-6">
               <button type="submit" className="btn btn-primary" disabled={loading}>
                 {loading ? (
-                  <span className="loading loading-spinner"></span>
+                  <>
+                    <span className="loading loading-spinner"></span>
+                    Logging in...
+                  </>
                 ) : (
                   'Login'
                 )}

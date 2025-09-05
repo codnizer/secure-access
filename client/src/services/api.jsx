@@ -1,17 +1,13 @@
-// src/services/api.js
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api', // Replace with your backend URL
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL:  'http://localhost:3000/api',
 });
 
-// Optional: Add an interceptor to include JWT token in requests
+// Add request interceptor to include token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('admin_token'); // Or personnel_token, guard_token
+    const token = localStorage.getItem('admin_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -22,17 +18,16 @@ api.interceptors.request.use(
   }
 );
 
-// Optional: Add an interceptor for response errors (e.g., token expiration)
+// Add response interceptor to handle auth errors
 api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response && error.response.status === 401) {
-            // Handle unauthorized errors, e.g., redirect to login
-            localStorage.removeItem('admin_token');
-            // window.location.href = '/'; // Or use navigate from react-router-dom
-        }
-        return Promise.reject(error);
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('admin_token');
+      window.location.href = '/admin/login';
     }
+    return Promise.reject(error);
+  }
 );
 
 export default api;

@@ -1,5 +1,5 @@
 const Admin = require('../models/adminModel');
-
+require('dotenv').config();
 exports.createAdmin = async (req, res) => {
   try {
     const { fname, lname, email, phone, password } = req.body;
@@ -79,24 +79,29 @@ exports.loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    // Find admin with password included
     const admin = await Admin.findByEmailWithPassword(email);
     if (!admin) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Compare passwords
-    const isMatch = await bcrypt.compare(password, admin.password);
+    console.log('Admin found:', admin);
+    console.log('PasswordHash field in admin object:', admin.passwordHash);
+
+    // Check if passwordHash field exists and is not undefined
+    if (!admin.passwordHash) {
+      console.error('PasswordHash field is missing or undefined in admin object');
+      return res.status(500).json({ message: 'Authentication error' });
+    }
+
+    const isMatch = await Admin.comparePassword(password, admin.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    // Generate JWT
+    console.log(process.env.JWT_SECRET);
     const token = jwt.sign(
       { 
         id: admin.id,
@@ -107,8 +112,8 @@ exports.loginAdmin = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Remove password from response
-    const { password: _, ...adminWithoutPassword } = admin;
+    // Remove passwordHash from response
+    const { passwordHash, ...adminWithoutPassword } = admin;
 
     res.status(200).json({
       message: 'Login successful',
@@ -118,6 +123,14 @@ exports.loginAdmin = async (req, res) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({ message: 'Server error during login', error: error.message });
+  }
+};
+exports.verifyToken = async (req, res) => {
+  try {
+    // If we reach here, the token is valid (passed through auth middleware)
+    res.status(200).json({ valid: true, user: req.user });
+  } catch (error) {
+    res.status(401).json({ valid: false, message: 'Invalid token' });
   }
 };

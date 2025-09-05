@@ -10,8 +10,12 @@ const guardKioskAssignmentRoutes = require('./routes/guardKioskAssignmentRoutes'
 const requestRoutes = require('./routes/requestRoutes'); // Import new routes
 const logRoutes = require('./routes/logRoutes'); 
 const personnelEmplacementsRoutes = require('./routes/personnelEmplacementsRoutes');
+const cors = require('cors');
 
-
+app.use(cors({
+  origin: 'http://localhost:5173', // Your frontend URL
+  credentials: true // If you need to send cookies
+}));
 app.use(express.json());
 
 
@@ -26,7 +30,7 @@ app.use('/api/admins', adminRoutes);
 app.use('/api/personnel', personnelRoutes); 
 app.use('/api/guards', guardRoutes);
 
-app.use('/api/kiosk-devices', kioskDeviceRoutes);
+app.use('/api/kiosks', kioskDeviceRoutes);
 app.use('/api/guard-kiosk-assignments', guardKioskAssignmentRoutes);
 app.use('/api/requests', requestRoutes); // New route
 app.use('/api/logs', logRoutes);  
