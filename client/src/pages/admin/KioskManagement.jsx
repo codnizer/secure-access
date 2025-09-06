@@ -32,7 +32,7 @@ const KioskManagement = () => {
 
   // Assignment form state
   const [assignmentForm, setAssignmentForm] = useState({
-    guardId: ''
+    guardid: ''
   });
 
   // Fetch kiosks data
@@ -69,6 +69,7 @@ const KioskManagement = () => {
   const fetchGuards = async () => {
     try {
       const response = await api.get('/guards');
+      console.log('Guards fetched:', response.data); // Debug log
       setGuards(response.data);
     } catch (err) {
       console.error('Error fetching guards:', err);
@@ -81,11 +82,22 @@ const KioskManagement = () => {
   // Fetch assignments
 const fetchAssignments = async () => {
   try {
+    console.log('Fetching assignments...'); // Debug log
     const response = await api.get('/guard-kiosk-assignments');
-    console.log('Assignments fetched:', response.data);
-    setAssignments(response.data);
+    console.log('Assignments response:', response.data); // Debug log
+    
+    if (response.data && Array.isArray(response.data)) {
+      setAssignments(response.data);
+      console.log('Assignments set successfully:', response.data , 'items');
+    } else {
+      console.error('Invalid assignments data format:', response.data);
+      setAssignments([]);
+    }
   } catch (err) {
     console.error('Error fetching assignments:', err);
+    console.error('Error details:', err.response?.data);
+    setError('Failed to fetch assignments: ' + (err.response?.data?.message || err.message));
+    setAssignments([]); // Set empty array on error
     if (err.response?.status === 401) {
       logout();
     }
@@ -127,6 +139,55 @@ const fetchAssignments = async () => {
     
     setFilteredKiosks(result);
   }, [filters, kiosks]);
+
+  // Get assigned guards for a kiosk
+const getAssignedGuards = (kioskId) => {
+  console.log('=== Debug getAssignedGuards ===');
+  console.log('Looking for kiosk:', kioskId);
+  console.log('Available assignments:', assignments);
+  console.log('Available guards:', guards);
+
+  if (!assignments.length || !guards.length || !kioskId) {
+    console.log('Missing data - returning empty array');
+    return [];
+  }
+
+  // Filter assignments for this kiosk
+  const kioskAssignments = assignments.filter(assignment => {
+    console.log(`Comparing kioskdeviceid: "${assignment.kioskdeviceid}" === "${kioskId}"`);
+    return assignment.kioskdeviceid === kioskId; // Exact match, no string conversion
+  });
+  
+  console.log('Matching assignments for this kiosk:', kioskAssignments);
+
+  // Map assignments to guards
+  const matchedGuards = kioskAssignments.map(assignment => {
+    console.log(`Looking for guard with ID: "${assignment.guardid}"`);
+    
+    const guard = guards.find(g => {
+      console.log(`Comparing guard ID: "${g.id}" === "${assignment.guardid}"`);
+      return g.id === assignment.guardid; // Exact match
+    });
+    
+    console.log('Found guard:', guard);
+    return guard ? { ...guard, assignmentId: assignment.id } : null;
+  }).filter(Boolean);
+
+  console.log('Final matched guards:', matchedGuards);
+  console.log('=== End Debug ===');
+  
+  return matchedGuards;
+};
+
+
+  // Get available guards for assignment (not already assigned to this kiosk)
+  const getAvailableGuards = (kioskId) => {
+    const assignedguardids = assignments
+      .filter(assignment => assignment.kioskdeviceid === kioskId)
+      .map(assignment => assignment.guardid);
+    
+    return guards.filter(guard => !assignedguardids.includes(guard.id));
+  };
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -181,7 +242,7 @@ const fetchAssignments = async () => {
     
     try {
       await api.post('/guard-kiosk-assignments', {
-        guardId: assignmentForm.guardId,
+        guardId: assignmentForm.guardid,
         kioskDeviceId: selectedKiosk.id
       });
       
@@ -189,7 +250,7 @@ const fetchAssignments = async () => {
       setShowAssignmentModal(false);
       setSelectedKiosk(null);
       setAssignmentForm({
-        guardId: ''
+        guardid: ''
       });
       
       // Refresh data
@@ -223,6 +284,7 @@ const fetchAssignments = async () => {
   // Handle assign
   const handleAssign = (kiosk) => {
     setSelectedKiosk(kiosk);
+    setAssignmentForm({ guardid: '' }); // Reset form
     setShowAssignmentModal(true);
   };
 
@@ -288,7 +350,7 @@ const fetchAssignments = async () => {
     setShowAssignmentModal(false);
     setSelectedKiosk(null);
     setAssignmentForm({
-      guardId: ''
+      guardid: ''
     });
   };
 
@@ -301,6 +363,16 @@ const fetchAssignments = async () => {
       </div>
     );
   }
+// Add this inside your component, just before the return statement
+console.log('Debug Info:', {
+  assignments: assignments,
+  guards: guards,
+  filteredKiosks: filteredKiosks,
+  kioskAssignments: assignments.filter(a => a.kioskdeviceid === filteredKiosks[0]?.id),
+  matchedGuards: assignments
+    .filter(a => a.kioskdeviceid === filteredKiosks[0]?.id)
+    .map(a => guards.find(g => g.id === a.guardid))
+});
 
   return (
     <div className="p-6">
@@ -408,78 +480,84 @@ const fetchAssignments = async () => {
                 </td>
               </tr>
             ) : (
-              filteredKiosks.map(kiosk => (
-                <tr key={kiosk.id}>
-                  <td className="font-mono">{kiosk.id.substring(0, 8)}...</td>
-                  <td>
-                    {emplacements.find(emp => emp.id === kiosk.assignedemplacementid)?.name || 'Not assigned'}
-                  </td>
-                  <td>
-                    <div className="flex items-center">
-                      <span className={`badge ${kiosk.isonline ? 'badge-success' : 'badge-error'}`}>
-                        {kiosk.isonline ? 'Online' : 'Offline'}
-                      </span>
-                      <button 
-                        className="btn btn-ghost btn-xs ml-2"
-                        onClick={() => handleOnlineStatus(kiosk.id, !kiosk.isonline)}
-                        title={kiosk.isonline ? 'Mark as offline' : 'Mark as online'}
-                      >
-                        {kiosk.isonline ? <FaWifi /> : <FaWifi />}
-                      </button>
-                    </div>
-                  </td>
-                  <td>
-  {assignments
-    .filter(assignment => assignment.kioskDeviceId === kiosk.id)
-    .map(assignment => {
-      const guard = guards.find(g => g.id === assignment.guardId);
-      return guard ? (
-        <div key={assignment.id} className="flex items-center justify-between mb-1 p-1 bg-base-200 rounded">
-          <span>{guard.fname} {guard.lname}</span>
-          <button 
-            className="btn btn-xs btn-ghost text-error"
-            onClick={() => handleUnassign(assignment.id)}
-            title="Remove assignment"
-          >
-            <FaUnlink />
-          </button>
-        </div>
-      ) : null;
-    })}
-  {assignments.filter(assignment => assignment.kioskDeviceId === kiosk.id).length === 0 && (
-    <span className="text-sm">No guards assigned</span>
-  )}
-</td>
-                  <td>
-                    <div className="flex space-x-2">
-                      <button 
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => handleView(kiosk)}
-                      >
-                        <FaEye />
-                      </button>
-                      <button 
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => handleEdit(kiosk)}
-                      >
-                        <FaEdit />
-                      </button>
-                      <button 
-                        className="btn btn-ghost btn-xs text-info"
-                        onClick={() => handleAssign(kiosk)}
-                      >
-                        <FaLink />
-                      </button>
-                      <button 
-                        className="btn btn-ghost btn-xs text-error"
-                        onClick={() => handleDelete(kiosk.id)}
-                      >
-                        <FaTrash />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              filteredKiosks.map(kiosk => {
+                const assignedGuards = getAssignedGuards(kiosk.id);
+                
+                return (
+                  <tr key={kiosk.id}>
+                    <td className="font-mono">{kiosk.id.substring(0, 8)}...</td>
+                    <td>
+                      {emplacements.find(emp => emp.id === kiosk.assignedemplacementid)?.name || 'Not assigned'}
+                    </td>
+                    <td>
+                      <div className="flex items-center">
+                        <span className={`badge ${kiosk.isonline ? 'badge-success' : 'badge-error'}`}>
+                          {kiosk.isonline ? 'Online' : 'Offline'}
+                        </span>
+                        <button 
+                          className="btn btn-ghost btn-xs ml-2"
+                          onClick={() => handleOnlineStatus(kiosk.id, !kiosk.isonline)}
+                          title={kiosk.isonline ? 'Mark as offline' : 'Mark as online'}
+                        >
+                          <FaWifi />
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      {assignedGuards.length > 0 ? (
+                        <div className="space-y-1">
+                          {assignedGuards.map(guard => (
+                            <div key={guard.id} className="flex items-center justify-between p-1 bg-base-200 rounded text-sm">
+                              <span>{guard.fname} {guard.lname}</span>
+                              <button 
+                                className="btn btn-xs btn-ghost text-error"
+                                onClick={() => handleUnassign(guard.assignmentId)}
+                                title="Remove assignment"
+                              >
+                                <FaUnlink />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">No guards assigned</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex space-x-2">
+                        <button 
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => handleView(kiosk)}
+                          title="View details"
+                        >
+                          <FaEye />
+                        </button>
+                        <button 
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => handleEdit(kiosk)}
+                          title="Edit kiosk"
+                        >
+                          <FaEdit />
+                        </button>
+                        <button 
+                          className="btn btn-ghost btn-xs text-info"
+                          onClick={() => handleAssign(kiosk)}
+                          title="Assign guard"
+                        >
+                          <FaLink />
+                        </button>
+                        <button 
+                          className="btn btn-ghost btn-xs text-error"
+                          onClick={() => handleDelete(kiosk.id)}
+                          title="Delete kiosk"
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -563,33 +641,34 @@ const fetchAssignments = async () => {
               </div>
               
               <div className="form-control md:col-span-2">
-  <label className="label">
-    <span className="label-text font-bold">Assigned Guards</span>
-  </label>
-  <div className="p-2 bg-base-200 rounded-lg">
-    {assignments
-      .filter(assignment => assignment.kioskDeviceId === editingKiosk.id)
-      .map(assignment => {
-        const guard = guards.find(g => g.id === assignment.guardId);
-        return guard ? (
-          <div key={assignment.id} className="flex items-center justify-between mb-2 p-2 bg-base-100 rounded">
-            <span>{guard.fname} {guard.lname}</span>
-            <button 
-              className="btn btn-xs btn-ghost text-error"
-              onClick={() => handleUnassign(assignment.id)}
-              title="Remove assignment"
-            >
-              <FaUnlink />
-            </button>
-          </div>
-        ) : null;
-      })}
-    {assignments.filter(assignment => assignment.kioskDeviceId === editingKiosk.id).length === 0 && (
-      <span className="text-sm">No guards assigned</span>
-    )}
-  </div>
-</div>
-
+                <label className="label">
+                  <span className="label-text font-bold">Assigned Guards</span>
+                </label>
+                <div className="p-2 bg-base-200 rounded-lg">
+                  {(() => {
+                    const assignedGuards = getAssignedGuards(editingKiosk.id);
+                    
+                    return assignedGuards.length > 0 ? (
+                      <div className="space-y-2">
+                        {assignedGuards.map(guard => (
+                          <div key={guard.id} className="flex items-center justify-between p-2 bg-base-100 rounded">
+                            <span>{guard.fname} {guard.lname}</span>
+                            <button 
+                              className="btn btn-xs btn-ghost text-error"
+                              onClick={() => handleUnassign(guard.assignmentId)}
+                              title="Remove assignment"
+                            >
+                              <FaUnlink />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm">No guards assigned</span>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
             
             <div className="modal-action">
@@ -619,22 +698,35 @@ const fetchAssignments = async () => {
                     <span className="label-text">Select Guard</span>
                   </label>
                   <select
-                    name="guardId"
+                    name="guardid"
                     className="select select-bordered"
-                    value={assignmentForm.guardId}
+                    value={assignmentForm.guardid}
                     onChange={handleAssignmentChange}
                     required
                   >
                     <option value="">Select Guard</option>
-                    {guards.map(guard => (
-                      <option key={guard.id} value={guard.id}>{guard.fname} {guard.lname}</option>
+                    {getAvailableGuards(selectedKiosk.id).map(guard => (
+                      <option key={guard.id} value={guard.id}>
+                        {guard.fname} {guard.lname}
+                        {guard.phone && ` - ${guard.phone}`}
+                      </option>
                     ))}
                   </select>
                 </div>
+                
+                {getAvailableGuards(selectedKiosk.id).length === 0 && (
+                  <div className="alert alert-warning">
+                    <span>All guards are already assigned to this kiosk.</span>
+                  </div>
+                )}
               </div>
               
               <div className="modal-action">
-                <button type="submit" className="btn btn-primary">
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={getAvailableGuards(selectedKiosk.id).length === 0}
+                >
                   <FaLink className="mr-2" /> Assign Guard
                 </button>
                 <button type="button" className="btn" onClick={handleCloseAssignmentModal}>
