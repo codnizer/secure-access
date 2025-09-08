@@ -22,7 +22,18 @@ class KioskDevice {
     const res = await db.query('SELECT * FROM KioskDevice WHERE id = $1', [id]);
     return res.rows[0];
   }
-
+// New method specifically for updating online status
+  static async updateOnlineStatus(id, isOnline) {
+    try {
+      const res = await db.query(
+        'UPDATE KioskDevice SET isOnline = $1 WHERE id = $2 RETURNING *',
+        [isOnline, id]
+      );
+      return res.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  }
   static async update(id, updates) {
     const fields = [];
     const values = [];

@@ -84,3 +84,27 @@ exports.deleteKioskDevice = async (req, res) => {
     res.status(500).json({ message: 'Error deleting kiosk device', error: error.message });
   }
 };
+
+// New controller function to handle updating just the online status
+exports.updateOnlineStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOnline } = req.body;
+
+    // Validate that isOnline is a boolean
+    if (typeof isOnline !== 'boolean') {
+      return res.status(400).json({ message: 'The isOnline field must be a boolean value.' });
+    }
+
+    const updatedKiosk = await KioskDevice.updateOnlineStatus(id, isOnline);
+
+    if (!updatedKiosk) {
+      return res.status(404).json({ message: 'Kiosk device not found' });
+    }
+
+    res.status(200).json(updatedKiosk);
+  } catch (error) {
+    console.error('Error updating kiosk online status:', error);
+    res.status(500).json({ message: 'Error updating kiosk online status', error: error.message });
+  }
+};

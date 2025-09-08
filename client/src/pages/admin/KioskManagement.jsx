@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { FaPlus, FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaTimes, FaLink, FaUnlink, FaWifi } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaTimes, FaLink, FaUnlink, FaWifi,FaBan } from 'react-icons/fa';
 import api from '../../services/api';
 
 const KioskManagement = () => {
@@ -499,7 +499,7 @@ console.log('Debug Info:', {
                           onClick={() => handleOnlineStatus(kiosk.id, !kiosk.isonline)}
                           title={kiosk.isonline ? 'Mark as offline' : 'Mark as online'}
                         >
-                          <FaWifi />
+                          {kiosk.isonline ? <FaWifi /> : <FaBan />}
                         </button>
                       </div>
                     </td>
