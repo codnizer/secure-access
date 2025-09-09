@@ -30,6 +30,7 @@ services:
       DB_PORT: 5432
       JWT_SECRET: f4b6d97ae1ec601bf341907d22ff1f70ec9b9ef54ddcf193a3965623dc7dae6b
       PORT: 3000
+      HOST: 0.0.0.0
     depends_on:
       - db # Ensure 'db' service starts before 'backend'
     volumes:

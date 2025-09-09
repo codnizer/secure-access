@@ -1,6 +1,6 @@
 const Personnel = require('../models/personnelModel');
 const Emplacement = require('../models/emplacementModel'); // To validate Emplacement ID
- 
+ const PersonnelEmplacements = require('../models/PersonnelEmplacements');
 
 // const fingerprintEmbeddingsTest=[0.208106,0.233367,0.123394,0.257414,0.410535,0.454487,0.410464,0.180361,0.954105,0.606241,0.385485,0.397344,0.351621,0.837193,0.157483,0.896455,0.500804,0.991825,0.687566,0.253827,0.736993,0.20859,0.049978,0.682004,0.914645,0.502396,0.179336,0.448639,0.781242,0.18776,0.474154,0.313853,0.948205,0.173584,0.554549,0.378055,0.656161,0.501057,0.974204,0.274199,0.177735,0.686502,0.758642,0.303825,0.976943,0.379907,0.316056,0.622893,0.69378,0.881032,0.392852,0.165794,0.571582,0.325344,0.216726,0.97997,0.810025,0.507621,0.426645,0.23294,0.628961,0.81695,0.325666,0.454686,0.931669,0.238909,0.073297,0.377243,0.750717,0.083399,0.774378,0.451443,0.74428,0.66969,0.595374,0.466847,0.279869,0.696124,0.192314,0.556283,0.3699,0.45071,0.225368,0.902405,0.577647,0.179735,0.270374,0.754382,0.590851,0.994788,0.630536,0.940406,0.338916,0.704518,0.324236,0.235058,0.497424,0.531186,0.73987,0.537559,0.476322,0.840508,0.042588,0.378445,0.909919,0.493051,0.638613,0.549228,0.637798,0.786833,0.290535,0.15634,0.122672,0.061806,0.339876,0.114701,0.990941,0.897985,0.40719,0.7122,0.970705,0.581792,0.632573,0.231484,0.687403,0.1194,0.11434,0.308102,0.469096,0.512245,0.120079,0.08149,0.681996,0.227679,0.478652,0.672694,0.897659,0.412541,0.982231,0.608408,0.628555,0.82217,0.722403,0.345416,0.684857,0.667012,0.025296,0.31247,0.07721,0.775935,0.827051,0.481655,0.694919,0.90692,0.134577,0.597423,0.591172,0.044492,0.223031,0.624358,0.051752,0.260352,0.890788,0.124741,0.878678,0.00263,0.605339,0.095189,0.080374,0.479319,0.873526,0.808992,0.761609,0.51032,0.23633,0.746477,0.424839,0.144873,0.96558,0.259253,0.813374,0.471708,0.23176,0.486814,0.40029,0.240143,0.475574,0.441683,0.487506,0.058655,0.601041,0.954336,0.238088,0.985078,0.945867,0.117424,0.222753,0.439645,0.809054,0.042201,0.087129,0.980513,0.841114,0.996503,0.613774,0.668457,0.934805,0.711863,0.006952,0.352779,0.206654,0.926914,0.75716,0.718167,0.041637,0.867088,0.150633,0.744926,0.422185,0.038578,0.536346,0.793782,0.840466,0.833081,0.695775,0.5743,0.065528,0.484739,0.492149,0.780424,0.086555,0.828882,0.953156,0.532478,0.276239,0.349672,0.158531,0.62327,0.908389,0.001754,0.209558,0.55166,0.079628,0.677406,0.813346,0.494302,0.419563,0.05818,0.995035,0.527162,0.020715,0.405851,0.746142,0.366966,0.977818,0.640868]
 
@@ -300,7 +300,7 @@ exports.verifyImage = async (req, res) => {
     }
 
     const imagePath = path.join(uploadsDir, req.file.filename);
-
+    console.log('Uploaded image path:', imagePath);
     // Generate embeddings for the uploaded image
     const uploadedEmbeddings = await generateFaceEmbeddings(imagePath);
 
@@ -340,5 +340,46 @@ exports.verifyImage = async (req, res) => {
   } catch (error) {
     console.error('Error verifying image:', error);
     res.status(500).json({ message: 'Error verifying image', error: error.message });
+  }
+};
+// Get personnel by PIN
+exports.getPersonnelByPin = async (req, res) => {
+  try {
+    const personnel = await Personnel.findByPin(req.params.pin);
+    if (!personnel) {
+      return res.status(404).json({ message: 'Personnel not found with this PIN' });
+    }
+    res.status(200).json(personnel);
+  } catch (error) {
+    console.error('Error fetching personnel by PIN:', error);
+    res.status(500).json({ message: 'Error fetching personnel', error: error.message });
+  }
+};
+
+// Check access permissions
+exports.checkAccess = async (req, res) => {
+  try {
+    const { personnelId, emplacementId } = req.query;
+    const hasAccess = await PersonnelEmplacements.hasAccess(personnelId, emplacementId);
+    
+    if (!hasAccess) {
+      return res.json({ hasAccess: false });
+    }
+
+    // Check expiration
+    const accessData = await PersonnelEmplacements.getByPersonnelId(personnelId);
+    const emplacementAccess = accessData.find(access => access.emplacementid === emplacementId);
+    
+    const isExpired = emplacementAccess?.expirationdate && 
+      new Date(emplacementAccess.expirationdate) < new Date();
+
+    res.json({ 
+      hasAccess: true, 
+      isExpired: !!isExpired,
+      expirationDate: emplacementAccess?.expirationdate 
+    });
+  } catch (error) {
+    console.error('Error checking access:', error);
+    res.status(500).json({ message: 'Error checking access', error: error.message });
   }
 };

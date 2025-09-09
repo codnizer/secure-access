@@ -1,7 +1,25 @@
 import axios from 'axios';
 
+// Determine API URL based on current host
+const getApiBaseUrl = () => {
+  const hostname = window.location.hostname;
+  
+  // If using ngrok (https tunnel) - use relative path
+  if (hostname.includes('ngrok.io') || hostname.includes('ngrok-free.app')) {
+    return '/api'; // Use same ngrok domain for API
+  }
+  
+  // If accessing via local network IP
+  if (hostname === '192.168.1.19' || hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://192.168.1.19:3000/api';
+  }
+  
+  // Default fallback for production
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL:  'http://localhost:3000/api',
+  baseURL: getApiBaseUrl(),
 });
 
 // Add request interceptor to include token

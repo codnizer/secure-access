@@ -83,3 +83,37 @@ exports.bulkUpdateAccess = async (req, res) => {
     res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
+
+exports.checkAccess = async (req, res) => {
+  try {
+    const { personnelId, emplacementId } = req.query;
+    
+    if (!personnelId || !emplacementId) {
+      return res.status(400).json({ message: 'personnelId and emplacementId are required' });
+    }
+
+    // Check if personnel has access
+    const accessRecord = await PersonnelEmplacements.getByPersonnelId(personnelId);
+    const emplacementAccess = accessRecord.find(access => access.emplacementid === emplacementId);
+    
+    if (!emplacementAccess) {
+      return res.json({ 
+        hasAccess: false, 
+        isExpired: false 
+      });
+    }
+
+    // Check if access has expired
+    const isExpired = emplacementAccess.expirationdate && 
+      new Date(emplacementAccess.expirationdate) < new Date();
+
+    res.json({ 
+      hasAccess: true, 
+      isExpired: !!isExpired,
+      expirationDate: emplacementAccess.expirationdate 
+    });
+  } catch (error) {
+    console.error('Error checking access:', error);
+    res.status(500).json({ message: 'Error checking access', error: error.message });
+  }
+};

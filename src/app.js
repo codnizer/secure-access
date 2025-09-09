@@ -13,8 +13,8 @@ const personnelEmplacementsRoutes = require('./routes/personnelEmplacementsRoute
 const cors = require('cors');
 
 app.use(cors({
-  origin: 'http://localhost:5173', // Your frontend URL
-  credentials: true // If you need to send cookies
+  origin: true, // Allows all origins (good for testing)
+  credentials: true
 }));
 app.use(express.json());
 
