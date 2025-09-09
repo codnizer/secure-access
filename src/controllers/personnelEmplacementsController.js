@@ -59,3 +59,27 @@ exports.updateExpiration = async (req, res) => {
     res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
+
+exports.getEmplacementsByPersonnelId = async (req, res) => {
+  try {
+    const { personnelId } = req.params;
+    const data = await PersonnelEmplacements.getEmplacementsByPersonnelId(personnelId);
+    res.status(200).json(data);
+  } catch (err) {
+    console.error('Error fetching personnel emplacements:', err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
+
+exports.bulkUpdateAccess = async (req, res) => {
+  try {
+    const { personnelId, emplacements } = req.body;
+    // emplacements should be an array of {emplacementId, expirationDate, hasAccess}
+    
+    const result = await PersonnelEmplacements.bulkUpdateAccess(personnelId, emplacements);
+    res.status(200).json({ message: 'Access updated successfully', result });
+  } catch (err) {
+    console.error('Error updating personnel access:', err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};

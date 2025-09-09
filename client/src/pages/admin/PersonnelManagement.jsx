@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { FaUserPlus, FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaTimes, FaQrcode, FaKey } from 'react-icons/fa';
+import { FaUserPlus, FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaTimes, FaQrcode, FaKey, FaBuilding, FaCheck, FaClock, FaLock } from 'react-icons/fa';
 import api from '../../services/api';
 
 const PersonnelManagement = () => {
@@ -10,9 +10,15 @@ const PersonnelManagement = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
   const [viewMode, setViewMode] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
+  const [selectedPersonnelForAccess, setSelectedPersonnelForAccess] = useState(null);
   const [emplacements, setEmplacements] = useState([]);
+  const [personnelEmplacements, setPersonnelEmplacements] = useState([]);
+  const [personnelAuthorizedAccess, setPersonnelAuthorizedAccess] = useState([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [viewAccessLoading, setViewAccessLoading] = useState(false);
   const [filters, setFilters] = useState({
     status: 'all',
     emplacement: 'all',
@@ -28,7 +34,6 @@ const PersonnelManagement = () => {
     lname: '',
     photoUrl: '',
     photoEmbeddings: '',
-     
     phone: '',
     service: '',
     isActive: true
@@ -61,6 +66,125 @@ const PersonnelManagement = () => {
       if (err.response?.status === 401) {
         logout();
       }
+    }
+  };
+
+  // Fetch personnel emplacements for access management modal
+  const fetchPersonnelEmplacements = async (personnelId) => {
+    try {
+      setAccessLoading(true);
+      const response = await api.get(`/personnel-emplacements/emplacements/${personnelId}`);
+      
+      // Update state with existing access status
+      setPersonnelEmplacements(response.data.map(emp => ({
+        ...emp,
+        hasAccess: emp.hasaccess || false
+      })));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch personnel emplacements');
+      if (err.response?.status === 401) {
+        logout();
+      }
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  // Fetch personnel authorized access for view modal
+  const fetchPersonnelAuthorizedAccess = async (personnelId) => {
+    try {
+      setViewAccessLoading(true);
+      const response = await api.get(`/personnel-emplacements/${personnelId}`);
+      
+      // Filter only authorized emplacements and map with emplacement details
+      const authorizedAccessPromises = response.data.map(async (access) => {
+        try {
+          const emplacementResponse = await api.get(`/emplacements/${access.emplacementid}`);
+          return {
+            ...access,
+            emplacementName: emplacementResponse.data.name,
+            emplacementType: emplacementResponse.data.type,
+            isExpired: access.expirationdate && new Date(access.expirationdate) < new Date()
+          };
+        } catch (err) {
+          return {
+            ...access,
+            emplacementName: 'Unknown Emplacement',
+            emplacementType: 'Unknown',
+            isExpired: access.expirationdate && new Date(access.expirationdate) < new Date()
+          };
+        }
+      });
+
+      const authorizedAccess = await Promise.all(authorizedAccessPromises);
+      setPersonnelAuthorizedAccess(authorizedAccess);
+    } catch (err) {
+      console.error('Error fetching personnel authorized access:', err);
+      setPersonnelAuthorizedAccess([]);
+    } finally {
+      setViewAccessLoading(false);
+    }
+  };
+
+  // Handle manage access
+  const handleManageAccess = async (person) => {
+    setSelectedPersonnelForAccess(person);
+    setShowAccessModal(true);
+    await fetchPersonnelEmplacements(person.id);
+  };
+
+  // Handle access toggle
+  const handleAccessToggle = (emplacementId, hasAccess) => {
+    setPersonnelEmplacements(prev => prev.map(emp => 
+      emp.id === emplacementId 
+        ? { 
+            ...emp, 
+            hasAccess: hasAccess,
+            expirationdate: hasAccess ? 
+              (emp.expirationdate || new Date(Date.now() + 30*24*60*60*1000).toISOString()) : 
+              null
+          }
+        : emp
+    ));
+  };
+
+  // Handle expiration date change
+  const handleExpirationChange = (emplacementId, expirationDate) => {
+    setPersonnelEmplacements(prev => prev.map(emp => 
+      emp.id === emplacementId 
+        ? { ...emp, expirationdate: expirationDate }
+        : emp
+    ));
+  };
+
+  // Save access changes
+  const handleSaveAccess = async () => {
+    if (!selectedPersonnelForAccess) return;
+    
+    try {
+      setAccessLoading(true);
+      const emplacementsData = personnelEmplacements.map(emp => ({
+        emplacementId: emp.id,
+        hasAccess: emp.hasAccess,
+        expirationDate: emp.hasAccess ? emp.expirationdate : null
+      }));
+
+      await api.post('/personnel-emplacements/bulk-update', {
+        personnelId: selectedPersonnelForAccess.id,
+        emplacements: emplacementsData
+      });
+
+      setSuccess('Access permissions updated successfully');
+      setShowAccessModal(false);
+      setSelectedPersonnelForAccess(null);
+      setPersonnelEmplacements([]);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update access');
+      if (err.response?.status === 401) {
+        logout();
+      }
+    } finally {
+      setAccessLoading(false);
     }
   };
 
@@ -152,12 +276,11 @@ const PersonnelManagement = () => {
         lname: formData.lname,
         photoUrl: formData.photoUrl,
         photoEmbeddings: formData.photoEmbeddings,
-         
         phone: formData.phone,
         service: formData.service,
         isActive: formData.isActive
       };
-      console.log(submissionData)
+      
       const url = editingPerson ? `/personnel/${editingPerson.id}` : '/personnel';
       const method = editingPerson ? 'put' : 'post';
       
@@ -171,7 +294,6 @@ const PersonnelManagement = () => {
         lname: '',
         photoUrl: '',
         photoEmbeddings: '',
-       
         phone: '',
         service: '',
         isActive: true
@@ -195,7 +317,6 @@ const PersonnelManagement = () => {
       lname: person.lname,
       photoUrl: person.photourl,
       photoEmbeddings: person.photoembeddings,
-      
       phone: person.phone,
       service: person.service,
       isActive: person.isactive
@@ -205,10 +326,12 @@ const PersonnelManagement = () => {
   };
 
   // Handle view
-  const handleView = (person) => {
+  const handleView = async (person) => {
     setEditingPerson(person);
     setViewMode(true);
     setShowModal(true);
+    // Fetch authorized access when viewing personnel details
+    await fetchPersonnelAuthorizedAccess(person.id);
   };
 
   // Handle delete
@@ -232,17 +355,31 @@ const PersonnelManagement = () => {
     setShowModal(false);
     setEditingPerson(null);
     setViewMode(false);
+    setPersonnelAuthorizedAccess([]);
     setFormData({
       national_id: '',
       fname: '',
       lname: '',
       photoUrl: '',
       photoEmbeddings: '',
-     
       phone: '',
       service: '',
       isActive: true
     });
+  };
+
+  // Close access modal
+  const handleCloseAccessModal = () => {
+    setShowAccessModal(false);
+    setSelectedPersonnelForAccess(null);
+    setPersonnelEmplacements([]);
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No expiration';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
 
   if (loading) {
@@ -351,14 +488,13 @@ const PersonnelManagement = () => {
               <th>Service</th>
               <th>Phone</th>
               <th>Status</th>
-              
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredPersonnel.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center py-8 text-gray-500">
+                <td colSpan="6" className="text-center py-8 text-gray-500">
                   No personnel found
                 </td>
               </tr>
@@ -385,23 +521,32 @@ const PersonnelManagement = () => {
                       {person.isactive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  
                   <td>
                     <div className="flex space-x-2">
                       <button 
-                        className="btn btn-ghost btn-xs"
+                        className="btn btn-ghost btn-xs tooltip"
+                        data-tip="View Details"
                         onClick={() => handleView(person)}
                       >
                         <FaEye />
                       </button>
                       <button 
-                        className="btn btn-ghost btn-xs"
+                        className="btn btn-ghost btn-xs tooltip"
+                        data-tip="Edit Personnel"
                         onClick={() => handleEdit(person)}
                       >
                         <FaEdit />
                       </button>
                       <button 
-                        className="btn btn-ghost btn-xs text-error"
+                        className="btn btn-ghost btn-xs tooltip text-info"
+                        data-tip="Manage Access"
+                        onClick={() => handleManageAccess(person)}
+                      >
+                        <FaBuilding />
+                      </button>
+                      <button 
+                        className="btn btn-ghost btn-xs text-error tooltip"
+                        data-tip="Delete Personnel"
                         onClick={() => handleDelete(person.id)}
                       >
                         <FaTrash />
@@ -414,6 +559,95 @@ const PersonnelManagement = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Access Management Modal */}
+      {showAccessModal && selectedPersonnelForAccess && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-4xl">
+            <h3 className="font-bold text-2xl mb-6">
+              Manage Access - {selectedPersonnelForAccess.fname} {selectedPersonnelForAccess.lname}
+            </h3>
+            
+            {accessLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <span className="loading loading-spinner loading-lg"></span>
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {personnelEmplacements.map(emplacement => (
+                  <div key={emplacement.id} className="card bg-base-200 shadow-sm">
+                    <div className="card-body p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-semibold text-lg">{emplacement.name}</h4>
+                            {emplacement.hasAccess && (
+                              <span className="badge badge-success badge-sm">
+                                <FaCheck className="mr-1" /> Authorized
+                              </span>
+                            )}
+                          </div>
+                          {emplacement.type && (
+                            <p className="text-sm text-gray-600 mt-1">Type: {emplacement.type}</p>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center space-x-4">
+                          {emplacement.hasAccess && (
+                            <div className="form-control">
+                              <label className="label">
+                                <span className="label-text text-xs">Expiration Date</span>
+                              </label>
+                              <input
+                                type="datetime-local"
+                                className="input input-bordered input-sm w-48"
+                                value={emplacement.expirationdate ? 
+                                  new Date(emplacement.expirationdate).toISOString().slice(0, 16) : 
+                                  new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0, 16)
+                                }
+                                onChange={(e) => handleExpirationChange(emplacement.id, e.target.value)}
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="form-control">
+                            <label className="label cursor-pointer">
+                              <span className="label-text mr-3">Access</span>
+                              <input
+                                type="checkbox"
+                                className="toggle toggle-primary"
+                                checked={emplacement.hasAccess}
+                                onChange={(e) => handleAccessToggle(emplacement.id, e.target.checked)}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="modal-action">
+              <button 
+                className="btn btn-primary"
+                onClick={handleSaveAccess}
+                disabled={accessLoading}
+              >
+                {accessLoading ? <span className="loading loading-spinner"></span> : 'Save Changes'}
+              </button>
+              <button 
+                className="btn" 
+                onClick={handleCloseAccessModal}
+                disabled={accessLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showModal && !viewMode && (
@@ -501,8 +735,6 @@ const PersonnelManagement = () => {
                   />
                 </div>
                 
-                
-                
                 <div className="form-control">
                   <label className="label">
                     <span className="label-text">Status</span>
@@ -560,13 +792,13 @@ const PersonnelManagement = () => {
         </div>
       )}
 
-      {/* View Modal */}
+      {/* View Modal with Authorized Access */}
       {showModal && viewMode && editingPerson && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-3xl">
+          <div className="modal-box max-w-4xl max-h-screen overflow-y-auto">
             <h3 className="font-bold text-2xl mb-6">Personnel Details</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <div className="col-span-1 md:col-span-2 flex justify-center">
                 <div className="avatar">
                   <div className="mask mask-squircle w-32 h-32">
@@ -631,8 +863,6 @@ const PersonnelManagement = () => {
                 </div>
               </div>
               
-              
-              
               <div className="form-control">
                 <label className="label">
                   <span className="label-text font-bold flex items-center">
@@ -655,6 +885,59 @@ const PersonnelManagement = () => {
                 </div>
               </div>
             </div>
+
+            {/* Authorized Access Section */}
+            <div className="divider">
+              <span className="text-lg font-bold flex items-center">
+                <FaBuilding className="mr-2" /> Authorized Access
+              </span>
+            </div>
+
+            {viewAccessLoading ? (
+              <div className="flex justify-center items-center h-32">
+                <span className="loading loading-spinner loading-lg"></span>
+              </div>
+            ) : personnelAuthorizedAccess.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <FaLock className="mx-auto mb-4 text-4xl" />
+                <p>No authorized access found for this personnel</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {personnelAuthorizedAccess.map((access, index) => (
+                  <div key={index} className="card bg-base-200 shadow-sm">
+                    <div className="card-body p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-semibold">{access.emplacementName}</h4>
+                            {access.isExpired ? (
+                              <span className="badge badge-error badge-sm">
+                                <FaClock className="mr-1" /> Expired
+                              </span>
+                            ) : (
+                              <span className="badge badge-success badge-sm">
+                                <FaCheck className="mr-1" /> Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">Type: {access.emplacementType}</p>
+                        </div>
+                        
+                        <div className="text-right">
+                          <div className="text-sm">
+                            <span className="font-medium">Expires:</span>
+                          </div>
+                          <div className={`text-sm ${access.isExpired ? 'text-error' : 'text-success'}`}>
+                            {formatDate(access.expirationdate)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             
             <div className="modal-action">
               <button type="button" className="btn" onClick={handleCloseModal}>

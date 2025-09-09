@@ -16,5 +16,6 @@ router.delete('/', controller.remove);
 
 // Update expiration date
 router.put('/expiration', controller.updateExpiration);
-
+router.get('/emplacements/:personnelId', controller.getEmplacementsByPersonnelId);
+router.post('/bulk-update', controller.bulkUpdateAccess);
 module.exports = router;
