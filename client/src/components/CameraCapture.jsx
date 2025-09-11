@@ -1,6 +1,11 @@
 // src/components/CameraCapture.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as faceapi from 'face-api.js';
+ 
+
+// Note: 'face-api.js' is expected to be loaded via a <script> tag in your index.html
+// and will be available on the window object as 'faceapi'.
+// The import statement has been removed to fix the build error.
 
 const CameraCapture = ({ onCapture, disabled, processing }) => {
   const videoRef = useRef(null);
@@ -20,11 +25,18 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
   // Load face-api.js models
   useEffect(() => {
     const loadModels = async () => {
+      // Ensure faceapi is available on the window object
+      if (!window.faceapi) {
+        console.error('face-api.js not loaded. Please include it in your HTML.');
+        setCameraError('Face detection library not found.');
+        return;
+      }
+
       try {
         const MODEL_URL = '/models';
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
         setModelsLoaded(true);
         console.log('Face-api.js models loaded successfully');
       } catch (error) {
@@ -101,7 +113,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
-        // Wait for video to be ready - enhanced checks
         const handleVideoReady = () => {
           console.log('Video loaded and ready');
           setVideoReady(true);
@@ -110,20 +121,17 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
         videoRef.current.onloadedmetadata = handleVideoReady;
         videoRef.current.oncanplay = handleVideoReady;
         
-        // Also handle playing event to ensure video is actually playing
         videoRef.current.onplaying = () => {
           console.log('Video is now playing');
           setVideoReady(true);
         };
 
-        // Force play the video to ensure it's actually playing
         try {
           await videoRef.current.play();
         } catch (playError) {
           console.warn('Video play failed:', playError);
         }
 
-        // Fallback check
         setTimeout(() => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             setVideoReady(true);
@@ -147,12 +155,12 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
   };
 
   const detectFaces = async () => {
-    // Enhanced checks for video readiness
     if (!videoRef.current || 
         !modelsLoaded || 
         processing || 
         isCapturingRef.current || 
         !videoReady ||
+        !window.faceapi ||
         videoRef.current.readyState < 2 ||
         videoRef.current.paused ||
         !videoRef.current.videoWidth || 
@@ -161,8 +169,8 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
     }
 
     try {
-      const detections = await faceapi
-        .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions({
+      const detections = await window.faceapi
+        .detectAllFaces(videoRef.current, new window.faceapi.TinyFaceDetectorOptions({
           inputSize: 416,
           scoreThreshold: 0.5
         }));
@@ -230,22 +238,21 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
     countdownTimeout.current = setTimeout(decrementCountdown, 1000);
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     console.log('capturePhoto called');
     
-    // Enhanced validation for video state
     if (!videoRef.current || 
         !canvasRef.current || 
         processing || 
         isCapturingRef.current ||
-        !videoReady) {
+        !videoReady ||
+        !window.faceapi) {
       console.warn('Cannot capture: basic checks failed');
       return;
     }
 
     const video = videoRef.current;
     
-    // Comprehensive video state validation
     if (video.readyState < 2 ||
         video.paused ||
         !video.videoWidth || 
@@ -264,26 +271,32 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
     isCapturingRef.current = true;
     console.log('Starting capture process...');
 
+    console.log('Performing final face verification before capture...');
+    const finalDetections = await window.faceapi.detectAllFaces(video, new window.faceapi.TinyFaceDetectorOptions({
+        inputSize: 416,
+        scoreThreshold: 0.5
+    }));
+
+    if (finalDetections.length === 0) {
+        console.warn('Capture aborted: Final verification failed. No face detected.');
+        isCapturingRef.current = false;
+        resetDetection();
+        return;
+    }
+    console.log('Final verification passed. Capturing frame.');
+
     const canvas = canvasRef.current;
     
     try {
-      // Set canvas dimensions to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
       console.log('Canvas dimensions set:', canvas.width, 'x', canvas.height);
       
       const ctx = canvas.getContext('2d');
-      
-      // Clear canvas first
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw the video frame
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
       console.log('Image drawn to canvas');
       
-      // Convert to blob with high quality
       canvas.toBlob((blob) => {
         console.log('Blob created:', blob ? `${blob.size} bytes` : 'null');
         
@@ -296,7 +309,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
           setCameraError('Failed to capture image. Please try again.');
         }
         
-        // Reset state after capture
         setTimeout(() => {
           isCapturingRef.current = false;
           resetDetection();
@@ -390,7 +402,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
           style={{ height: '300px', objectFit: 'cover' }}
         />
         
-        {/* Loading overlay for video */}
         {!videoReady && (
           <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center">
             <div className="text-white text-center">
@@ -400,7 +411,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
           </div>
         )}
         
-        {/* Face detection overlay */}
         {videoReady && autoCapture && faceDetected && countdown === 0 && (
           <div className="absolute inset-0 border-4 border-green-400 rounded-lg animate-pulse">
             <div className="absolute top-2 left-2 bg-green-400 text-white px-2 py-1 rounded text-sm">
@@ -409,7 +419,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
           </div>
         )}
         
-        {/* Countdown overlay */}
         {countdown > 0 && (
           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
             <div className="text-white text-center">
@@ -429,7 +438,6 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
         )}
       </div>
       
-      {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       
       {/* Controls */}
@@ -466,3 +474,4 @@ const CameraCapture = ({ onCapture, disabled, processing }) => {
 };
 
 export default CameraCapture;
+

@@ -329,6 +329,7 @@ exports.verifyImage = async (req, res) => {
     }
 
     if (matchedPersonnel && highestSimilarity >= threshold) {
+      console.log('Match found:', matchedPersonnel.fname, matchedPersonnel.lname, 'Similarity:', highestSimilarity);
       return res.status(200).json({
         message: 'Personnel verified',
         personnel: matchedPersonnel,
